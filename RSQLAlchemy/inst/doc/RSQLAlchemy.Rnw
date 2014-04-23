@@ -1,0 +1,149 @@
+%\VignetteIndexEntry{RSQLAlchemy OOP abstraction of sqlite databases}
+%\VignetteDepends{RSQLAlchemy}
+%\VignetteKeywords{databases}
+%\VignetteKeywords{sqlite}
+%\VignetteKeywords{RSQLAlchemy}
+%\VignettePackage{RSQLAlchemy}
+%\VignetteEngine{knitr}
+
+%\SweaveOpts{engine=R,eps=FALSE}
+\SweaveOpts{syntax="SweaveSyntaxNoweb"} 
+\documentclass[a4paper,11pt]{article}
+
+\title{RSQLAlchemy: OOP abstraction of a SQLite database}
+\author{by Awo Ashiabor}
+\date{\today}
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+\maketitle
+
+\section{Introduction}
+ \texttt{RSQLAlchemy} is a package that abstracts sqlite databases. Sqlite objects such as databases, tables and records are abstracted in an object oriented programming (OOP) framework. To process records, one invokes methods associated with the OOP representations. This package provides database read and write functionalities and is equivalent to the object oriented abstraction component (ORM) of the python package, SQLAlchemy\footnote{See http://www.sqlalchemy.org/}.
+
+\section{RSQLAlchemy Concepts}
+ \texttt{RSQLAlchemy}  aims to provide an object oriented programming alternative to SQL\footnote{SQL is a language for querying and managing data in databases---}-based database management  systems (DBMSs) such as SQLite. With \texttt{RSQLAlchemy}, a sqlite database connection is abstracted as an \emph{engine}. Tables are abstracted as reference classes using the \emph{mapTable} function. The \emph{session} provides a workspace for running applications. It is in the session that one can query the engine for data and perform complex data processing such as data filtering, joins and so on. The session also provides methods to write to the sqlite database.
+
+\subsection*{Start an RSQLAlchemy session}
+Begin an RSQLAlchemy application by creating a session.
+<<>>=
+require(RSQLAlchemy)
+mySession=session()
+@
+
+\subsection*{Connect to a database}
+To connect to a database, create an engine with a database location and bind the engine to the sesion. The example below connects to the sqlite database enclosed in the package \texttt{RSQLAlchemy}
+<<>>=
+testDB
+testEngine=engine(databaseName=testDB)
+mySession$bind(testEngine)
+@
+
+\subsection*{Query database}
+Query contents of a table in the database by calling the \emph{query()} method. The \emph{query()} method returns the entire set of query results.
+<<>>=
+mySession$query("snp") #prints entire table
+#mySession$query("snp.snp_id")#prints snp_id column in snp table
+#mySession$query("snp","snp.snp_id")
+@
+
+\subsection*{Limit query results}
+To limit query results use the \emph{limit()} method or the \emph{offset()} method.
+<<>>= 
+mySession$query("snp.snp_id")$limit()[1:5,]
+mySession$query("snp.snp_id")$offset()[5:10,]
+@
+
+
+\subsection*{Sort query results}
+To sort query results, use the \emph{orderBy()} method.
+<<>>=
+mySession$query("snp")$orderBy("all_A")
+mySession$query("snp")$orderBy("all_A","all_B")#sort by multiple columns
+@
+
+\subsection*{Filter query results}
+RSQLAlchemy permits various filter conditions. The \emph{filterBy()} method can interprete most basic comparison functions such as \emph{==}, \emph{!=} and \emph{is.null()}. RSQLAlchemy also provides functions equivalent to the  \emph{not like} and \emph{not in} sql filters. It allows combination of filter clauses and nested filters.
+
+<<>>=
+mySession$query("snp")$filterBy(all_A=="A") #equals
+mySession$query("snp")$filterBy(all_A!="A") #not equals
+#mySession$query("snp")$filterBy(snp_id %like% "1") #like
+#mySession$query("snp")$filterBy(snp_id %!like% "1") #not like
+#mySession$query("snp")$filterBy(all_A %in% c("A","C")) #in
+#mySession$query("snp")$filterBy(all_A %!in% c("A","C")) #not in
+#mySession$query("snp")$filterBy(is.null(all_A)) #is null
+#mySession$query("snp")$filterBy(!is.null(all_A)) #is not null
+#mySession$query("snp")$filterBy(all_A=="A" | all_A=="C")#or
+#mySession$query("snp")$filterBy(all_A=="A" & all_B=="C")#and
+#mySession$query("snp","genotype")$filterBy(snp.snp_id==genotype.snp_id)#multiple tables
+@
+
+\section{Joins}
+To join multiple tables, use any of the 4 RSQLAlchemy join methods: innerjoin, leftjoin, rightjoin and outerjoin (abbreviated as join).
+<<>>=
+mySession$join("snp","genotype")$limit()[1:3,] #outerjoin
+#mySession$outerjoin("snp","genotype.genotype")
+#mySession$join("snp","genotype")$filterBy(snp.snp_id==genotype.snp_id)
+#mySession$innerjoin("snp","genotype",joinOn="snp.snp_id==genotype.snp_id")
+#mySession$leftjoin("snp","genotype",joinOn="snp.snp_id==genotype.snp_id")
+#mySession$rightjoin("snp","genotype",joinOn="snp.snp_id==genotype.snp_id")
+@
+
+ \section{Abstract a database table structure as an OOP object (reference class)}
+Map a database table structure to a reference class by running the \emph{mapTable} function. \emph{tableName} provides the link between the reference class and the sqlite table. In the case of the example below, the \textbf{snp class} is mapped to the \textbf{snp table} in the database.
+
+<<>>=
+snp<-mapTable(tableName="snp",
+              columns='snp_id="character",chr="character",all_A="character",all_B="character"',
+             primaryKey="snp_id");
+snp 
+#create an instance of snp
+SNP50 <- snp(snp_id='SNP50', chr="1", all_A="T", all_B="C")
+
+#access the attributes of instances like any other reference classes
+SNP50$snp_id
+SNP50$all_A
+SNP50$primaryKey
+@
+
+\section{Add and delete objects from session}
+One can save objects temporarily in the session before commiting them to the database. Similarly, RSQLAlchemy provides methods to delete objects saved in session.
+<<>>=
+#check contents of session
+length(mySession$objects);names(mySession$objects);mySession$objects
+
+#add an object to session
+mySession$add(SNP50)
+length(mySession$objects);names(mySession$objects);mySession$objects
+
+#modify object and resave to session
+SNP50$snp_id<-"SNPCHANGE"
+mySession$add(SNP50)#object previously added to session is replaced
+length(mySession$objects);names(mySession$objects);mySession$objects
+
+#add multiple objects at once
+SNPA <- snp(snp_id='SNPA', chr="1", all_A="T", all_B="C")
+SNPB <- snp(snp_id='SNPB', chr="1", all_A="T", all_B="C")
+mySession$add_all(SNPA,SNPB)
+length(mySession$objects);names(mySession$objects);mySession$objects
+
+#delete object(s) from session
+length(mySession$objects);names(mySession$objects)
+mySession$delete(SNP50)
+length(mySession$objects);names(mySession$objects)
+mySession$delete_all(SNPA,SNPB)
+length(mySession$objects);names(mySession$objects)
+@
+
+
+\section{Write to database}
+To write to database, run the commit() method
+<<>>=
+mySession$query("snp")
+SNPINSERT <- snp(snp_id='SNPINSERT', chr="1", all_A="T", all_B="C")
+mySession$add(SNPINSERT)
+mySession$commit()
+mySession$query("snp")
+@
+\end{document}
